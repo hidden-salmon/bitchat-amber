@@ -302,6 +302,7 @@ struct MapView: View {
 }
 
 // MARK: - Lightweight CoreLocation wrapper
+// (also reused by SubmitInfoView and MessageNGOView for "attach location" toggles)
 
 @MainActor
 final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {

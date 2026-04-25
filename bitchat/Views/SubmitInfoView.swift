@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import CoreLocation
 #if os(iOS)
 import AVFoundation
 #endif
@@ -14,6 +15,7 @@ struct SubmitInfoView: View {
 
     @State private var freeText: String = ""
     @State private var attachLocation: Bool = false
+    @State private var manualLocationCode: String = ""
 
     // Photo
     @State private var photoItem: PhotosPickerItem? = nil
@@ -21,6 +23,28 @@ struct SubmitInfoView: View {
 
     // Voice
     @StateObject private var recorder = VoiceMemoRecorder()
+
+    // Location
+    @StateObject private var locator = LocationProvider()
+
+    /// Returns (lat, lng, geohash) if a location is attached — either from GPS
+    /// or from a manually-entered geohash code.
+    private var resolvedLocation: (Double, Double, String)? {
+        guard attachLocation else { return nil }
+        // Manual code wins if the user typed one
+        let trimmed = manualLocationCode.trimmingCharacters(in: .whitespaces).lowercased()
+        if !trimmed.isEmpty {
+            let center = Geohash.decodeCenter(trimmed)
+            if center.lat != 0 || center.lon != 0 {
+                return (center.lat, center.lon, trimmed.uppercased())
+            }
+        }
+        if let fix = locator.lastFix {
+            let g = Geohash.encode(latitude: fix.latitude, longitude: fix.longitude, precision: 7)
+            return (fix.latitude, fix.longitude, g.uppercased())
+        }
+        return nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -79,8 +103,42 @@ struct SubmitInfoView: View {
 
                 Section {
                     Toggle("Attach my approximate location", isOn: $attachLocation)
+                        .onChange(of: attachLocation) { newValue in
+                            if newValue { locator.requestIfNeeded() }
+                        }
+                    if attachLocation {
+                        if let resolved = resolvedLocation {
+                            HStack(spacing: 8) {
+                                Image(systemName: "location.fill")
+                                    .foregroundStyle(SafeThreadBrand.red)
+                                Text("Location code")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(resolved.2)
+                                    .font(.system(.callout, design: .monospaced).weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(SafeThreadBrand.redSoft)
+                                    .foregroundStyle(SafeThreadBrand.red)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                        } else {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Waiting for a GPS fix…")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        TextField("Or paste a code (e.g. SY3R6X4)", text: $manualLocationCode)
+                            #if os(iOS)
+                            .textInputAutocapitalization(.characters)
+                            #endif
+                            .autocorrectionDisabled()
+                            .font(.system(.callout, design: .monospaced))
+                    }
                 } footer: {
-                    Text("Location is only sent if you opt in. It helps your NGO map where the person was last seen.")
+                    Text("Location is only sent if you opt in. The code travels in the message — readable over voice, SMS, or mesh — so it works even with no internet.")
                 }
 
                 Section {
@@ -208,10 +266,22 @@ struct SubmitInfoView: View {
     private func submit() async {
         let voiceData: Data?
         if let url = recorder.recordedURL { voiceData = try? Data(contentsOf: url) } else { voiceData = nil }
+
+        // Build the message body. When location is attached, append the geohash
+        // to the free text so anyone reading the payload (over mesh, SMS, etc.)
+        // sees a shareable code, not just numerical lat/lng.
+        var body = freeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var coords: (Double, Double)? = nil
+        if let loc = resolvedLocation {
+            coords = (loc.0, loc.1)
+            if !body.isEmpty { body += "\n\n" }
+            body += "📍 \(loc.2)"
+        }
+
         await alertsVM.submitSighting(
             caseId: alert.caseId,
-            freeText: freeText.trimmingCharacters(in: .whitespacesAndNewlines),
-            location: attachLocation ? nil : nil,
+            freeText: body,
+            location: coords,
             photoJPEG: photoData,
             voiceM4A: voiceData
         )

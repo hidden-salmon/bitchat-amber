@@ -1,11 +1,19 @@
 import SwiftUI
+import CoreLocation
 
 /// Free-form message from the user to the NGO hub.
 /// Always one-way (user → hub) — no recipient picker, no thread, no replies in the user UI.
 struct MessageNGOView: View {
     @EnvironmentObject var alertsVM: AlertsViewModel
+    @StateObject private var locator = LocationProvider()
 
     @State private var draft: String = ""
+    @State private var attachLocation: Bool = false
+
+    private var locationCode: String? {
+        guard attachLocation, let fix = locator.lastFix else { return nil }
+        return Geohash.encode(latitude: fix.latitude, longitude: fix.longitude, precision: 7).uppercased()
+    }
 
     var body: some View {
         NavigationStack {
@@ -30,6 +38,32 @@ struct MessageNGOView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3))
                 )
+
+            HStack(spacing: 10) {
+                Toggle(isOn: $attachLocation) {
+                    Label("Attach location", systemImage: "location")
+                        .font(.caption)
+                }
+                .toggleStyle(.button)
+                .controlSize(.small)
+                .onChange(of: attachLocation) { v in if v { locator.requestIfNeeded() } }
+
+                if let code = locationCode {
+                    Text(code)
+                        .font(.system(.caption, design: .monospaced).weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(SafeThreadBrand.redSoft)
+                        .foregroundStyle(SafeThreadBrand.red)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                } else if attachLocation {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.mini)
+                        Text("waiting for GPS").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
 
             HStack {
                 statusLabel
@@ -107,7 +141,11 @@ struct MessageNGOView: View {
     }
 
     private func send() async {
-        let toSend = draft
+        var toSend = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let code = locationCode {
+            if !toSend.isEmpty { toSend += "\n\n" }
+            toSend += "📍 \(code)"
+        }
         await alertsVM.sendMessageToNGO(toSend)
         if alertsVM.submissionState == .sent {
             draft = ""
