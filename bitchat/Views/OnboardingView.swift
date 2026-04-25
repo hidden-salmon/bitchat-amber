@@ -86,20 +86,18 @@ struct OnboardingView: View {
                     }
                     .disabled(name.isEmpty || phoneNumber.isEmpty || isSubmitting)
                 }
-
-                Section {
+            }
+            .navigationTitle("Welcome")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         alertsVM.enterDemoMode()
                     } label: {
-                        Text("Skip — demo mode (no backend)")
-                            .frame(maxWidth: .infinity)
-                            .foregroundStyle(.secondary)
+                        Text("Skip")
+                            .underline()
                     }
-                } footer: {
-                    Text("Bypasses registration and shows the app with sample alerts. Use this until the hub is up.")
                 }
             }
-            .navigationTitle("Welcome")
         }
     }
 

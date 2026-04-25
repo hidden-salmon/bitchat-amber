@@ -2,6 +2,11 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import Combine
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// Lets the user share a location with the NGO and tag it as safe or unsafe.
 ///
@@ -16,10 +21,20 @@ struct MapView: View {
 
     @State private var pinned: CLLocationCoordinate2D? = nil
     @State private var note: String = ""
+    @State private var pasteCode: String = ""
+    @State private var pasteError: String? = nil
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 36.21, longitude: 37.16), // default: Aleppo area
         span: MKCoordinateSpan(latitudeDelta: 0.4, longitudeDelta: 0.4)
     )
+
+    /// Precision 7 ≈ 150m accuracy — voice-friendly (8 chars), block-level resolution.
+    private static let geohashPrecision = 7
+
+    private var locationCode: String? {
+        guard let p = pinned else { return nil }
+        return Geohash.encode(latitude: p.latitude, longitude: p.longitude, precision: Self.geohashPrecision)
+    }
 
     var body: some View {
         NavigationStack {
@@ -98,6 +113,7 @@ struct MapView: View {
         VStack(alignment: .leading, spacing: 10) {
             Divider()
             statusBanner
+            locationCodeRow
             HStack(spacing: 8) {
                 Button {
                     if let fix = locator.lastFix {
@@ -159,6 +175,63 @@ struct MapView: View {
     }
 
     @ViewBuilder
+    private var locationCodeRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Show the active code if a pin is dropped
+            if let code = locationCode {
+                HStack(spacing: 8) {
+                    Image(systemName: "qrcode")
+                        .foregroundStyle(.secondary)
+                    Text("Location code")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(code.uppercased())
+                        .font(.system(.callout, design: .monospaced).weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(SafeThreadBrand.redSoft)
+                        .foregroundStyle(SafeThreadBrand.red)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    Spacer()
+                    Button {
+                        copyCode(code.uppercased())
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Text("Share this code by SMS, voice, or radio. Anyone with the app can paste it to see the same spot — no internet needed.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            // Paste a code to drop a pin
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.message")
+                    .foregroundStyle(.secondary)
+                TextField("Paste a location code (e.g. SY3R6X4)", text: $pasteCode)
+                    .textFieldStyle(.roundedBorder)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.characters)
+                    #endif
+                    .autocorrectionDisabled()
+                    .font(.system(.callout, design: .monospaced))
+                Button("Go") {
+                    decodeAndPin()
+                }
+                .buttonStyle(.bordered)
+                .disabled(pasteCode.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let err = pasteError {
+                Text(err)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var statusBanner: some View {
         switch alertsVM.submissionState {
         case .sent:
@@ -175,6 +248,41 @@ struct MapView: View {
         case .idle:
             EmptyView()
         }
+    }
+
+    private func copyCode(_ code: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = code
+        #elseif os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+        #endif
+    }
+
+    private func decodeAndPin() {
+        let raw = pasteCode
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
+        // Validate: geohash uses base32 ghs alphabet (no a/i/l/o)
+        let valid = CharacterSet(charactersIn: "0123456789bcdefghjkmnpqrstuvwxyz")
+        guard !raw.isEmpty,
+              raw.unicodeScalars.allSatisfy({ valid.contains($0) }) else {
+            pasteError = "That doesn't look like a valid location code."
+            return
+        }
+        let center = Geohash.decodeCenter(raw)
+        guard center.lat != 0 || center.lon != 0 else {
+            pasteError = "Could not decode that code."
+            return
+        }
+        pasteError = nil
+        let coord = CLLocationCoordinate2D(latitude: center.lat, longitude: center.lon)
+        pinned = coord
+        region = MKCoordinateRegion(
+            center: coord,
+            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        )
+        pasteCode = ""
     }
 
     private func report(_ safety: LocationReportPayload.Safety) async {
