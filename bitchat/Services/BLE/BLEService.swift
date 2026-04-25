@@ -4205,6 +4205,16 @@ extension BLEService {
                 notifyUI { [weak self] in
                     self?.delegate?.didReceiveNoisePayload(from: peerID, type: .verifyResponse, payload: Data(payloadData), timestamp: ts)
                 }
+            case .alert:
+                let ts = Date(timeIntervalSince1970: Double(packet.timestamp) / 1000)
+                notifyUI { [weak self] in
+                    self?.delegate?.didReceiveNoisePayload(from: peerID, type: .alert, payload: Data(payloadData), timestamp: ts)
+                }
+            case .sighting:
+                let ts = Date(timeIntervalSince1970: Double(packet.timestamp) / 1000)
+                notifyUI { [weak self] in
+                    self?.delegate?.didReceiveNoisePayload(from: peerID, type: .sighting, payload: Data(payloadData), timestamp: ts)
+                }
             case .none:
                 SecureLogger.warning("⚠️ Unknown noise payload type: \(payloadType)")
             }

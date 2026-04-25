@@ -3130,6 +3130,20 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
                 }
                 meshService.sendVerifyResponse(to: peerID, noiseKeyHex: tlv.noiseKeyHex, nonceA: tlv.nonceA)
                 // Silent response: no toast needed on responder
+            case .alert, .sighting:
+                // Forward amber-alert payloads to the AlertsViewModel via NotificationCenter
+                // so the chat layer stays decoupled from the alert app.
+                NotificationCenter.default.post(
+                    name: .amberPayloadReceived,
+                    object: nil,
+                    userInfo: [
+                        "type": type.rawValue,
+                        "payload": payload,
+                        "peerID": peerID.id,
+                        "timestamp": timestamp
+                    ]
+                )
+                return
             case .verifyResponse:
                 guard let resp = VerificationService.shared.parseVerifyResponse(payload) else { return }
                 // Check pending for this peer

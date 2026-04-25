@@ -75,7 +75,10 @@ enum NoisePayloadType: UInt8 {
     // Verification (QR-based OOB binding)
     case verifyChallenge = 0x10     // Verification challenge
     case verifyResponse  = 0x11     // Verification response
-    
+    // Amber-alert payloads (hub-and-spoke)
+    case alert = 0x20               // Hub-issued amber alert (broadcast, signed by NGO key)
+    case sighting = 0x21            // User-submitted sighting (addressed to hub)
+
     var description: String {
         switch self {
         case .privateMessage: return "privateMessage"
@@ -83,6 +86,8 @@ enum NoisePayloadType: UInt8 {
         case .delivered: return "delivered"
         case .verifyChallenge: return "verifyChallenge"
         case .verifyResponse: return "verifyResponse"
+        case .alert: return "alert"
+        case .sighting: return "sighting"
         }
     }
 }

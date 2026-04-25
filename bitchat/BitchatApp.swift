@@ -17,6 +17,7 @@ struct BitchatApp: App {
     static let groupID = "group.\(bundleID)"
     
     @StateObject private var chatViewModel: ChatViewModel
+    @StateObject private var alertsViewModel: AlertsViewModel
     #if os(iOS)
     @Environment(\.scenePhase) var scenePhase
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -39,6 +40,7 @@ struct BitchatApp: App {
                 identityManager: SecureIdentityStateManager(keychain)
             )
         )
+        _alertsViewModel = StateObject(wrappedValue: AlertsViewModel())
         
         UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
         // Warm up georelay directory and refresh if stale (once/day)
@@ -47,8 +49,9 @@ struct BitchatApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AmberRootView()
                 .environmentObject(chatViewModel)
+                .environmentObject(alertsViewModel)
                 .onAppear {
                     NotificationDelegate.shared.chatViewModel = chatViewModel
                     // Inject live Noise service into VerificationService to avoid creating new BLE instances
