@@ -136,7 +136,7 @@ final class HubClient {
     /// re-opening on disconnect.
     func openStream(userId: String) -> AsyncThrowingStream<HubEvent, Error> {
         let url = baseURL
-            .appending(path: "/v1/stream")
+            .amberAppending(path: "/v1/stream")
         var request = URLRequest(url: url)
         request.setValue("Bearer \(userId)", forHTTPHeaderField: "Authorization")
         let task = session.webSocketTask(with: request)
@@ -212,7 +212,7 @@ final class HubClient {
     // MARK: - HTTP helpers
 
     private func postJSON<B: Encodable, R: Decodable>(_ path: String, body: B, auth: String?) async throws -> R {
-        var req = URLRequest(url: baseURL.appending(path: path))
+        var req = URLRequest(url: baseURL.amberAppending(path: path))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let auth = auth { req.setValue("Bearer \(auth)", forHTTPHeaderField: "Authorization") }
@@ -221,7 +221,7 @@ final class HubClient {
     }
 
     private func getJSON<R: Decodable>(_ path: String, auth: String?) async throws -> R {
-        var req = URLRequest(url: baseURL.appending(path: path))
+        var req = URLRequest(url: baseURL.amberAppending(path: path))
         req.httpMethod = "GET"
         if let auth = auth { req.setValue("Bearer \(auth)", forHTTPHeaderField: "Authorization") }
         return try await sendDecoding(req)
@@ -270,11 +270,8 @@ private extension Data {
 }
 
 private extension URL {
-    func appending(path: String) -> URL {
-        if #available(iOS 16.0, macOS 13.0, *) {
-            return self.appending(path: path.hasPrefix("/") ? String(path.dropFirst()) : path)
-        } else {
-            return self.appendingPathComponent(path.hasPrefix("/") ? String(path.dropFirst()) : path)
-        }
+    func amberAppending(path: String) -> URL {
+        let trimmed = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        return self.appendingPathComponent(trimmed)
     }
 }

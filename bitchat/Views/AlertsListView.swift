@@ -22,7 +22,11 @@ struct AlertsListView: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    #if os(iOS)
                     .listStyle(.insetGrouped)
+                    #else
+                    .listStyle(.inset)
+                    #endif
                 }
             }
             .navigationTitle(navigationTitle)

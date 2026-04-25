@@ -59,7 +59,9 @@ struct SubmitInfoView: View {
                 }
             }
             .navigationTitle("Submit info")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }

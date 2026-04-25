@@ -27,7 +27,9 @@ struct OnboardingView: View {
 
                 Section("Invite code") {
                     TextField("e.g. NGO-ALEPPO-1234", text: $inviteCode)
+                        #if os(iOS)
                         .textInputAutocapitalization(.characters)
+                        #endif
                         .autocorrectionDisabled()
                 }
 
@@ -38,7 +40,9 @@ struct OnboardingView: View {
 
                 Section("Language") {
                     TextField("e.g. en, ar, uk", text: $language)
+                        #if os(iOS)
                         .textInputAutocapitalization(.never)
+                        #endif
                         .autocorrectionDisabled()
                 }
 
