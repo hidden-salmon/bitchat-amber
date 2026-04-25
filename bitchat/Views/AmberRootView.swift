@@ -11,10 +11,36 @@ struct AmberRootView: View {
     var body: some View {
         Group {
             if alertsVM.onboarded {
-                AlertsListView()
+                MainTabView()
             } else {
                 OnboardingView()
             }
+        }
+    }
+}
+
+private struct MainTabView: View {
+    var body: some View {
+        TabView {
+            AlertsListView()
+                .tabItem {
+                    Label("Alerts", systemImage: "exclamationmark.bubble")
+                }
+
+            MapView()
+                .tabItem {
+                    Label("Map", systemImage: "map")
+                }
+
+            MessageNGOView()
+                .tabItem {
+                    Label("Message NGO", systemImage: "envelope")
+                }
+
+            ProfileView()
+                .tabItem {
+                    Label("Profile", systemImage: "person.crop.circle")
+                }
         }
     }
 }

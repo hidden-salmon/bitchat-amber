@@ -174,7 +174,7 @@ extension ChatViewModel {
         case .verifyChallenge, .verifyResponse:
             // QR verification payloads over Nostr are not supported; ignore in geohash DMs
             break
-        case .alert, .sighting:
+        case .alert, .sighting, .locationReport, .generalMessage, .profileUpdate:
             // Amber-alert payloads are mesh/HTTP only — never over geohash Nostr DMs.
             break
         }
@@ -409,7 +409,7 @@ extension ChatViewModel {
         // Explicitly list other cases so we get compile-time check if a new case is added in the future
         case .verifyChallenge, .verifyResponse:
             break
-        case .alert, .sighting:
+        case .alert, .sighting, .locationReport, .generalMessage, .profileUpdate:
             // Amber-alert payloads are not handled over Nostr DMs.
             break
         }
@@ -656,7 +656,7 @@ extension ChatViewModel {
                             handleReadReceipt(payload, senderPubkey: senderPubkey, convKey: targetPeerID)
                         case .verifyChallenge, .verifyResponse:
                             break
-                        case .alert, .sighting:
+                        case .alert, .sighting, .locationReport, .generalMessage, .profileUpdate:
                             // Amber-alert payloads are not handled over Nostr DMs.
                             break
                         }

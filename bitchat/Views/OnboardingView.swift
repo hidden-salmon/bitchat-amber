@@ -6,8 +6,9 @@ struct OnboardingView: View {
     @EnvironmentObject var alertsVM: AlertsViewModel
     @EnvironmentObject var chatVM: ChatViewModel
 
-    @State private var inviteCode: String = ""
-    @State private var region: String = ""
+    @State private var name: String = ""
+    @State private var phoneNumber: String = ""
+    @State private var profession: String = ""
     @State private var language: String = Locale.current.language.languageCode?.identifier ?? "en"
     @State private var isSubmitting: Bool = false
     @State private var errorText: String? = nil
@@ -19,23 +20,33 @@ struct OnboardingView: View {
                     Text("Register with your NGO")
                         .font(.title2)
                         .fontWeight(.semibold)
-                    Text("Enter the invite code your NGO shared with you. You'll only receive amber alerts from that organisation.")
+                    Text("So we can reach you when an amber alert is issued in your area.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 .listRowBackground(Color.clear)
 
-                Section("Invite code") {
-                    TextField("e.g. NGO-ALEPPO-1234", text: $inviteCode)
+                Section("Name") {
+                    TextField("Your full name", text: $name)
+                        .autocorrectionDisabled()
+                }
+
+                Section("Phone number") {
+                    TextField("e.g. +963 21 123 4567", text: $phoneNumber)
                         #if os(iOS)
-                        .textInputAutocapitalization(.characters)
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
                         #endif
                         .autocorrectionDisabled()
                 }
 
-                Section("Region") {
-                    TextField("e.g. Aleppo, Syria", text: $region)
+                Section {
+                    TextField("e.g. nurse, teacher, driver", text: $profession)
                         .autocorrectionDisabled()
+                } header: {
+                    Text("Profession")
+                } footer: {
+                    Text("Optional. Helps the NGO route relevant alerts to you.")
                 }
 
                 Section("Language") {
@@ -66,7 +77,19 @@ struct OnboardingView: View {
                                 .fontWeight(.semibold)
                         }
                     }
-                    .disabled(inviteCode.isEmpty || region.isEmpty || isSubmitting)
+                    .disabled(name.isEmpty || phoneNumber.isEmpty || isSubmitting)
+                }
+
+                Section {
+                    Button {
+                        alertsVM.enterDemoMode()
+                    } label: {
+                        Text("Skip — demo mode (no backend)")
+                            .frame(maxWidth: .infinity)
+                            .foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("Bypasses registration and shows the app with sample alerts. Use this until the hub is up.")
                 }
             }
             .navigationTitle("Welcome")
@@ -77,15 +100,16 @@ struct OnboardingView: View {
         isSubmitting = true
         errorText = nil
         let pubkey = chatVM.meshService.getNoiseService().getStaticPublicKeyData()
+        let trimmedProfession = profession.trimmingCharacters(in: .whitespaces)
         await alertsVM.register(
-            inviteCode: inviteCode.trimmingCharacters(in: .whitespaces),
-            bitchatPublicKey: pubkey,
-            region: region.trimmingCharacters(in: .whitespaces),
-            language: language.trimmingCharacters(in: .whitespaces)
+            name: name.trimmingCharacters(in: .whitespaces),
+            phoneNumber: phoneNumber.trimmingCharacters(in: .whitespaces),
+            profession: trimmedProfession.isEmpty ? nil : trimmedProfession,
+            language: language.trimmingCharacters(in: .whitespaces),
+            bitchatPublicKey: pubkey
         )
         isSubmitting = false
         if !alertsVM.onboarded {
-            // Pull the failure message out of submissionState if we landed there.
             if case .failed(let msg) = alertsVM.submissionState {
                 errorText = msg
             } else {

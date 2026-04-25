@@ -28,8 +28,12 @@ final class AlertsViewModel: ObservableObject {
     @Published var onboarded: Bool = false
     @Published var alerts: [AmberAlert] = []
     @Published var registration: Registration? = nil
+    @Published var profile: UserProfile? = nil
     @Published var pendingSighting: PendingSighting? = nil
     @Published var submissionState: SubmissionState = .idle
+    @Published var isDemoMode: Bool = false
+    @Published var locationReports: [SubmittedLocationReport] = []
+    @Published var sentMessages: [SentMessage] = []
 
     enum SubmissionState: Equatable {
         case idle
@@ -82,21 +86,29 @@ final class AlertsViewModel: ObservableObject {
     // MARK: - Onboarding
 
     func register(
-        inviteCode: String,
-        bitchatPublicKey: Data,
-        region: String,
+        name: String,
+        phoneNumber: String,
+        profession: String?,
         language: String,
+        bitchatPublicKey: Data,
         apnsToken: String? = nil
     ) async {
         do {
             let reg = try await hubClient.register(
-                inviteCode: inviteCode,
-                bitchatPublicKey: bitchatPublicKey,
-                region: region,
+                name: name,
+                phoneNumber: phoneNumber,
+                profession: profession,
                 language: language,
+                bitchatPublicKey: bitchatPublicKey,
                 apnsToken: apnsToken
             )
             self.registration = reg
+            self.profile = UserProfile(
+                name: name,
+                phoneNumber: phoneNumber,
+                profession: profession,
+                language: language
+            )
             self.onboarded = true
             persist(reg)
         } catch {
@@ -104,11 +116,136 @@ final class AlertsViewModel: ObservableObject {
         }
     }
 
+    func updateProfile(name: String, phoneNumber: String, profession: String?, language: String) async {
+        let updated = UserProfile(name: name, phoneNumber: phoneNumber, profession: profession, language: language)
+        if isDemoMode {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            self.profile = updated
+            return
+        }
+        guard let reg = registration else { return }
+        do {
+            try await hubClient.updateProfile(updated, userId: reg.userId)
+            self.profile = updated
+        } catch {
+            // Surface via submissionState so the view can render an error
+            self.submissionState = .failed("Could not save profile: \(error.localizedDescription)")
+        }
+    }
+
+    func sendMessageToNGO(_ body: String) async {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let msg = SentMessage(id: UUID().uuidString, body: trimmed, sentAt: Date())
+        submissionState = .submitting
+        if isDemoMode {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            sentMessages.insert(msg, at: 0)
+            submissionState = .sent
+            return
+        }
+        guard let reg = registration else {
+            submissionState = .failed("Not onboarded")
+            return
+        }
+        do {
+            try await hubClient.sendMessage(body: trimmed, clientMsgId: msg.id, userId: reg.userId)
+            sentMessages.insert(msg, at: 0)
+            submissionState = .sent
+        } catch {
+            submissionState = .failed("Could not send message: \(error.localizedDescription)")
+        }
+    }
+
+    func reportLocation(lat: Double, lng: Double, safety: LocationReportPayload.Safety, note: String) async {
+        let report = SubmittedLocationReport(
+            id: UUID().uuidString,
+            lat: lat,
+            lng: lng,
+            safety: safety,
+            note: note,
+            observedAt: Date()
+        )
+        submissionState = .submitting
+        if isDemoMode {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            locationReports.insert(report, at: 0)
+            submissionState = .sent
+            return
+        }
+        guard let reg = registration else {
+            submissionState = .failed("Not onboarded")
+            return
+        }
+        do {
+            try await hubClient.reportLocation(report, userId: reg.userId)
+            locationReports.insert(report, at: 0)
+            submissionState = .sent
+        } catch {
+            submissionState = .failed("Could not send location report: \(error.localizedDescription)")
+        }
+    }
+
+    func resetSubmissionState() {
+        submissionState = .idle
+    }
+
     private func persist(_ reg: Registration) {
         defaults.set(reg.userId, forKey: "amber.userId")
         defaults.set(reg.hubPubkey, forKey: "amber.hubPubkey")
         defaults.set(reg.ngoName, forKey: "amber.ngoName")
         defaults.set(true, forKey: "amber.onboarded")
+    }
+
+    // MARK: - Demo mode (bypass hub, no backend needed)
+
+    /// Bootstraps the app with a fake registration and a few sample alerts so the
+    /// rest of the UI can be exercised without a running hub. Pure in-memory —
+    /// nothing is persisted.
+    func enterDemoMode() {
+        isDemoMode = true
+        registration = Registration(
+            userId: "demo-user-001",
+            hubPubkey: Data(repeating: 0xAB, count: 32),
+            ngoName: "Demo NGO"
+        )
+        profile = UserProfile(
+            name: "Hidde Kehrer",
+            phoneNumber: "+963 21 555 0142",
+            profession: "field worker",
+            language: "en"
+        )
+        onboarded = true
+        let now = Date()
+        alerts = [
+            AmberAlert(
+                caseId: "c-2026-0481",
+                title: "Maryam, 11",
+                summary: "Last seen at the Aleppo central bus station, wearing a red jacket. Travelling alone.",
+                issuedAt: now.addingTimeInterval(-60 * 35),
+                version: 2,
+                receivedVia: .internet,
+                photoURL: nil
+            ),
+            AmberAlert(
+                caseId: "c-2026-0479",
+                title: "Yusuf, 9",
+                summary: "Last seen near Bab al-Hawa border crossing yesterday afternoon.",
+                issuedAt: now.addingTimeInterval(-60 * 60 * 18),
+                version: 1,
+                receivedVia: .mesh,
+                photoURL: nil
+            ),
+            AmberAlert(
+                caseId: "c-2026-0470",
+                title: "Layla, 14",
+                summary: "Ongoing case — last update 3 days ago. Possible sighting in Idlib.",
+                issuedAt: now.addingTimeInterval(-60 * 60 * 72),
+                version: 5,
+                receivedVia: .internet,
+                photoURL: nil
+            )
+        ]
     }
 
     private func loadPersistedRegistration() {
@@ -181,6 +318,11 @@ final class AlertsViewModel: ObservableObject {
             observedAt: Date(),
             location: location
         )
+        if isDemoMode {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            submissionState = .sent
+            return
+        }
         do {
             // Try internet path first; the mesh fallback is wired in by the
             // bridge that owns the BLE handle (kept out of this VM to avoid
@@ -218,6 +360,13 @@ struct Registration: Equatable {
     let ngoName: String
 }
 
+struct UserProfile: Equatable {
+    var name: String
+    var phoneNumber: String
+    var profession: String?
+    var language: String
+}
+
 struct SightingDraft {
     let caseId: String
     let clientMsgId: String
@@ -235,4 +384,19 @@ enum HubEvent {
     case alertIssued(AmberAlert)
     case statusUpdate(caseId: String, summary: String)
     case ack(clientMsgId: String)
+}
+
+struct SubmittedLocationReport: Identifiable, Equatable {
+    let id: String
+    let lat: Double
+    let lng: Double
+    let safety: LocationReportPayload.Safety
+    let note: String
+    let observedAt: Date
+}
+
+struct SentMessage: Identifiable, Equatable {
+    let id: String
+    let body: String
+    let sentAt: Date
 }

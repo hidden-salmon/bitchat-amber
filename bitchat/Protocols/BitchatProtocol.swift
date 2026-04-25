@@ -78,6 +78,9 @@ enum NoisePayloadType: UInt8 {
     // Amber-alert payloads (hub-and-spoke)
     case alert = 0x20               // Hub-issued amber alert (broadcast, signed by NGO key)
     case sighting = 0x21            // User-submitted sighting (addressed to hub)
+    case locationReport = 0x22      // User-reported location with safe/unsafe flag (to hub)
+    case generalMessage = 0x23      // Free-form message from user to hub
+    case profileUpdate = 0x24       // User-initiated profile change (to hub)
 
     var description: String {
         switch self {
@@ -88,6 +91,9 @@ enum NoisePayloadType: UInt8 {
         case .verifyResponse: return "verifyResponse"
         case .alert: return "alert"
         case .sighting: return "sighting"
+        case .locationReport: return "locationReport"
+        case .generalMessage: return "generalMessage"
+        case .profileUpdate: return "profileUpdate"
         }
     }
 }

@@ -46,18 +46,20 @@ final class HubClient {
     // MARK: - HTTP
 
     func register(
-        inviteCode: String,
-        bitchatPublicKey: Data,
-        region: String,
+        name: String,
+        phoneNumber: String,
+        profession: String?,
         language: String,
+        bitchatPublicKey: Data,
         apnsToken: String?
     ) async throws -> Registration {
         struct Body: Encodable {
-            let invite_code: String
+            let name: String
+            let phone_number: String
+            let profession: String?
+            let language: String
             let bitchat_pubkey: String
             let apns_token: String?
-            let region: String
-            let language: String
         }
         struct Reply: Decodable {
             let user_id: String
@@ -65,11 +67,12 @@ final class HubClient {
             let ngo_name: String
         }
         let body = Body(
-            invite_code: inviteCode,
+            name: name,
+            phone_number: phoneNumber,
+            profession: profession,
+            language: language,
             bitchat_pubkey: bitchatPublicKey.hexString,
-            apns_token: apnsToken,
-            region: region,
-            language: language
+            apns_token: apnsToken
         )
         let reply: Reply = try await postJSON("/v1/register", body: body, auth: nil)
         guard let hubPubkey = Data(hexString: reply.hub_pubkey) else {
@@ -80,6 +83,55 @@ final class HubClient {
             hubPubkey: hubPubkey,
             ngoName: reply.ngo_name
         )
+    }
+
+    func updateProfile(_ p: UserProfile, userId: String) async throws {
+        struct Body: Encodable {
+            let name: String
+            let phone_number: String
+            let profession: String?
+            let language: String
+        }
+        struct Reply: Decodable { let ok: Bool }
+        let body = Body(
+            name: p.name,
+            phone_number: p.phoneNumber,
+            profession: p.profession,
+            language: p.language
+        )
+        let _: Reply = try await postJSON("/v1/profile", body: body, auth: userId)
+    }
+
+    func sendMessage(body: String, clientMsgId: String, userId: String) async throws {
+        struct Body: Encodable {
+            let body: String
+            let client_msg_id: String
+            let sent_at: TimeInterval
+        }
+        struct Reply: Decodable { let ok: Bool }
+        let req = Body(body: body, client_msg_id: clientMsgId, sent_at: Date().timeIntervalSince1970)
+        let _: Reply = try await postJSON("/v1/message", body: req, auth: userId)
+    }
+
+    func reportLocation(_ r: SubmittedLocationReport, userId: String) async throws {
+        struct Body: Encodable {
+            let client_msg_id: String
+            let lat: Double
+            let lng: Double
+            let safety: String
+            let note: String
+            let observed_at: TimeInterval
+        }
+        struct Reply: Decodable { let ok: Bool }
+        let body = Body(
+            client_msg_id: r.id,
+            lat: r.lat,
+            lng: r.lng,
+            safety: r.safety == .safe ? "safe" : "unsafe",
+            note: r.note,
+            observed_at: r.observedAt.timeIntervalSince1970
+        )
+        let _: Reply = try await postJSON("/v1/location_report", body: body, auth: userId)
     }
 
     func submitSighting(_ s: SightingDraft, userId: String) async throws {

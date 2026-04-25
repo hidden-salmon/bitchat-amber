@@ -3130,7 +3130,7 @@ final class ChatViewModel: ObservableObject, BitchatDelegate, CommandContextProv
                 }
                 meshService.sendVerifyResponse(to: peerID, noiseKeyHex: tlv.noiseKeyHex, nonceA: tlv.nonceA)
                 // Silent response: no toast needed on responder
-            case .alert, .sighting:
+            case .alert, .sighting, .locationReport, .generalMessage, .profileUpdate:
                 // Forward amber-alert payloads to the AlertsViewModel via NotificationCenter
                 // so the chat layer stays decoupled from the alert app.
                 NotificationCenter.default.post(
