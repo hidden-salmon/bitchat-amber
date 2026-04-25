@@ -1,6 +1,21 @@
-# Amber-Alert App (`bitchat-amber`)
+# SafeThread (`bitchat-amber`)
 
 > **An amber-alert receiver for war zones and low-connectivity areas, layered on top of [bitchat](https://github.com/permissionlesstech/bitchat)'s Bluetooth mesh + Nostr fallback. Built at a hackathon, slated for actual NGO deployment.**
+
+## Why it matters — the shortlist
+
+- 🛰️ **Works with no internet.** Alerts arrive over Bluetooth mesh, hopping phone-to-phone for up to 7 relays. Sightings, photos, and messages travel the same way back to the NGO.
+- 🌐 **Three independent paths to the NGO.** Direct internet (HTTPS + WebSocket), bitchat mesh (BLE), and Nostr relays (censorship-resistant). The app uses whichever is up; the user never picks.
+- 🛡️ **Hub-and-spoke by construction.** Users can only ever message the NGO — never each other. Enforced at the protocol layer, not a UI guideline. No DMs, no peer compose, no leak surface.
+- 🔐 **End-to-end encrypted.** Every payload rides bitchat's Noise XX channel with forward secrecy. Relay phones carry opaque ciphertext they can't decrypt. Triple-tap emergency wipe inherited from bitchat.
+- 🗺️ **Locations as 7-char codes.** Pin a spot on the map → get a geohash like `SY3R6X4` you can speak over a voice call, scrawl on paper, or send as SMS. Anyone with the app can paste it back to find the same place — no internet, no GPS needed on the receiving side.
+- 📷 **Multi-modal sightings.** Free-text + optional photo (auto-compressed JPEG) + optional voice note (AAC). Useful for low-literacy reporters or trauma situations where typing is the bottleneck.
+- ✓ **Delivery confirmations.** "sending → sent → received by NGO" badges so reporters in war zones know their tip actually landed.
+- 🧱 **Tiny, focused surface.** Five screens total. No chat, no peer list, no settings rabbit hole. Built to be unmistakable in use.
+- 🧪 **Demo-able with no backend.** A "Skip" link in onboarding bootstraps sample alerts so the app is fully clickable on a phone or simulator before the hub is even up.
+- ♻️ **Forward-compatible wire format.** TLV envelopes silently skip unknown fields, so either side of the protocol can evolve without breaking older clients.
+
+---
 
 When a child is reported missing — say, a victim of trafficking in a conflict zone — every minute counts. But cell towers might be down, internet might be intermittent, and anyone responsible for getting the alert out has to reach across a degraded, patchy network of phones, dumbphones, and offline regions.
 
