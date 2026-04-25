@@ -14,6 +14,7 @@ struct AlertPayload {
     let summary: String         // e.g. "last seen Aleppo bus stn"
     let issuedAt: UInt32        // unix seconds
     let version: UInt8          // increments when hub revises the alert
+    let category: AlertCategory?  // optional — older clients silently default to missingPerson
 
     private enum TLVType: UInt8 {
         case caseId = 0x01
@@ -21,6 +22,7 @@ struct AlertPayload {
         case summary = 0x03
         case issuedAt = 0x04
         case version = 0x05
+        case category = 0x06
     }
 
     func encode() -> Data? {
@@ -51,6 +53,12 @@ struct AlertPayload {
         data.append(UInt8(1))
         data.append(version)
 
+        if let category = category {
+            data.append(TLVType.category.rawValue)
+            data.append(UInt8(1))
+            data.append(category.rawValue)
+        }
+
         return data
     }
 
@@ -61,6 +69,7 @@ struct AlertPayload {
         var summary: String?
         var issuedAt: UInt32?
         var version: UInt8?
+        var category: AlertCategory?
 
         while offset + 2 <= data.count {
             let typeRaw = data[data.startIndex + offset]
@@ -93,6 +102,9 @@ struct AlertPayload {
             case .version:
                 guard length == 1, let v = value.first else { continue }
                 version = v
+            case .category:
+                guard length == 1, let v = value.first, let c = AlertCategory(rawValue: v) else { continue }
+                category = c
             }
         }
 
@@ -109,7 +121,8 @@ struct AlertPayload {
             title: title,
             summary: summary,
             issuedAt: issuedAt,
-            version: version
+            version: version,
+            category: category
         )
     }
 }

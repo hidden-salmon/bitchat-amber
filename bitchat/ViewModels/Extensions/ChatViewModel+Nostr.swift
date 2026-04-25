@@ -175,9 +175,23 @@ extension ChatViewModel {
             // QR verification payloads over Nostr are not supported; ignore in geohash DMs
             break
         case .alert, .sighting, .locationReport, .generalMessage, .profileUpdate:
-            // Amber-alert payloads are mesh/HTTP only — never over geohash Nostr DMs.
-            break
+            // Third fallback path: amber payloads carried over Nostr DMs.
+            forwardAmberPayloadToVM(noisePayload, senderPubkey: senderPubkey)
         }
+    }
+
+    @MainActor
+    private func forwardAmberPayloadToVM(_ payload: NoisePayload, senderPubkey: String) {
+        NotificationCenter.default.post(
+            name: .amberPayloadReceived,
+            object: nil,
+            userInfo: [
+                "type": payload.type.rawValue,
+                "payload": payload.data,
+                "peerID": "nostr:\(senderPubkey.prefix(8))",
+                "timestamp": Date()
+            ]
+        )
     }
 
     // MARK: - Geohash Channel Handling
@@ -410,8 +424,7 @@ extension ChatViewModel {
         case .verifyChallenge, .verifyResponse:
             break
         case .alert, .sighting, .locationReport, .generalMessage, .profileUpdate:
-            // Amber-alert payloads are not handled over Nostr DMs.
-            break
+            forwardAmberPayloadToVM(payload, senderPubkey: senderPubkey)
         }
     }
 
@@ -657,8 +670,7 @@ extension ChatViewModel {
                         case .verifyChallenge, .verifyResponse:
                             break
                         case .alert, .sighting, .locationReport, .generalMessage, .profileUpdate:
-                            // Amber-alert payloads are not handled over Nostr DMs.
-                            break
+                            forwardAmberPayloadToVM(payload, senderPubkey: senderPubkey)
                         }
                     }
                 }

@@ -34,6 +34,7 @@ final class AlertsViewModel: ObservableObject {
     @Published var isDemoMode: Bool = false
     @Published var locationReports: [SubmittedLocationReport] = []
     @Published var sentMessages: [SentMessage] = []
+    @Published var submittedSightings: [SubmittedSighting] = []
 
     enum SubmissionState: Equatable {
         case idle
@@ -56,6 +57,12 @@ final class AlertsViewModel: ObservableObject {
         self.defaults = defaults
         loadPersistedRegistration()
         subscribeToMeshPayloads()
+        // Auto-enter demo mode if launched with --demo (used by the simulator
+        // launcher so the populated UI shows up without tapping through the
+        // onboarding form).
+        if !onboarded && CommandLine.arguments.contains("--demo") {
+            enterDemoMode()
+        }
     }
 
     deinit {
@@ -136,11 +143,14 @@ final class AlertsViewModel: ObservableObject {
     func sendMessageToNGO(_ body: String) async {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let msg = SentMessage(id: UUID().uuidString, body: trimmed, sentAt: Date())
+        var msg = SentMessage(id: UUID().uuidString, body: trimmed, sentAt: Date())
+        sentMessages.insert(msg, at: 0)
         submissionState = .submitting
         if isDemoMode {
             try? await Task.sleep(nanoseconds: 400_000_000)
-            sentMessages.insert(msg, at: 0)
+            updateMessageDelivery(id: msg.id, to: .sentToHub)
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            updateMessageDelivery(id: msg.id, to: .deliveredToHub)
             submissionState = .sent
             return
         }
@@ -150,15 +160,22 @@ final class AlertsViewModel: ObservableObject {
         }
         do {
             try await hubClient.sendMessage(body: trimmed, clientMsgId: msg.id, userId: reg.userId)
-            sentMessages.insert(msg, at: 0)
+            updateMessageDelivery(id: msg.id, to: .sentToHub)
             submissionState = .sent
         } catch {
+            updateMessageDelivery(id: msg.id, to: .failed(error.localizedDescription))
             submissionState = .failed("Could not send message: \(error.localizedDescription)")
         }
     }
 
+    private func updateMessageDelivery(id: String, to status: AmberDeliveryStatus) {
+        if let i = sentMessages.firstIndex(where: { $0.id == id }) {
+            sentMessages[i].delivery = status
+        }
+    }
+
     func reportLocation(lat: Double, lng: Double, safety: LocationReportPayload.Safety, note: String) async {
-        let report = SubmittedLocationReport(
+        var report = SubmittedLocationReport(
             id: UUID().uuidString,
             lat: lat,
             lng: lng,
@@ -166,10 +183,13 @@ final class AlertsViewModel: ObservableObject {
             note: note,
             observedAt: Date()
         )
+        locationReports.insert(report, at: 0)
         submissionState = .submitting
         if isDemoMode {
             try? await Task.sleep(nanoseconds: 350_000_000)
-            locationReports.insert(report, at: 0)
+            updateLocationDelivery(id: report.id, to: .sentToHub)
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            updateLocationDelivery(id: report.id, to: .deliveredToHub)
             submissionState = .sent
             return
         }
@@ -179,10 +199,17 @@ final class AlertsViewModel: ObservableObject {
         }
         do {
             try await hubClient.reportLocation(report, userId: reg.userId)
-            locationReports.insert(report, at: 0)
+            updateLocationDelivery(id: report.id, to: .sentToHub)
             submissionState = .sent
         } catch {
+            updateLocationDelivery(id: report.id, to: .failed(error.localizedDescription))
             submissionState = .failed("Could not send location report: \(error.localizedDescription)")
+        }
+    }
+
+    private func updateLocationDelivery(id: String, to status: AmberDeliveryStatus) {
+        if let i = locationReports.firstIndex(where: { $0.id == id }) {
+            locationReports[i].delivery = status
         }
     }
 
@@ -225,7 +252,18 @@ final class AlertsViewModel: ObservableObject {
                 issuedAt: now.addingTimeInterval(-60 * 35),
                 version: 2,
                 receivedVia: .internet,
-                photoURL: nil
+                photoURL: nil,
+                category: .missingPerson
+            ),
+            AmberAlert(
+                caseId: "c-2026-0480",
+                title: "Insulin needed — Sector 7",
+                summary: "Type-1 diabetic, 14yo male, two days without supply. Family at the school shelter.",
+                issuedAt: now.addingTimeInterval(-60 * 90),
+                version: 1,
+                receivedVia: .mesh,
+                photoURL: nil,
+                category: .medical
             ),
             AmberAlert(
                 caseId: "c-2026-0479",
@@ -234,7 +272,28 @@ final class AlertsViewModel: ObservableObject {
                 issuedAt: now.addingTimeInterval(-60 * 60 * 18),
                 version: 1,
                 receivedVia: .mesh,
-                photoURL: nil
+                photoURL: nil,
+                category: .missingPerson
+            ),
+            AmberAlert(
+                caseId: "c-2026-0478",
+                title: "No water — Block 4",
+                summary: "Mains down for ~36h. ~80 households affected. Convoy ETA unknown.",
+                issuedAt: now.addingTimeInterval(-60 * 60 * 22),
+                version: 2,
+                receivedVia: .internet,
+                photoURL: nil,
+                category: .resourceShortage
+            ),
+            AmberAlert(
+                caseId: "c-2026-0476",
+                title: "Avoid Block 2 corridor",
+                summary: "Reported building damage and unsafe debris on the route to the market. Use the south road.",
+                issuedAt: now.addingTimeInterval(-60 * 60 * 30),
+                version: 1,
+                receivedVia: .internet,
+                photoURL: nil,
+                category: .safety
             ),
             AmberAlert(
                 caseId: "c-2026-0470",
@@ -243,7 +302,8 @@ final class AlertsViewModel: ObservableObject {
                 issuedAt: now.addingTimeInterval(-60 * 60 * 72),
                 version: 5,
                 receivedVia: .internet,
-                photoURL: nil
+                photoURL: nil,
+                category: .missingPerson
             )
         ]
     }
@@ -276,7 +336,8 @@ final class AlertsViewModel: ObservableObject {
                 issuedAt: Date(timeIntervalSince1970: TimeInterval(parsed.issuedAt)),
                 version: parsed.version,
                 receivedVia: .mesh,
-                photoURL: nil
+                photoURL: nil,
+                category: parsed.category ?? .missingPerson
             )
         )
     }
@@ -286,9 +347,10 @@ final class AlertsViewModel: ObservableObject {
         switch event {
         case .alertIssued(let rich):
             upsertAlert(rich)
-        case .statusUpdate, .ack:
-            // v1: status updates not rendered yet
+        case .statusUpdate:
             break
+        case .ack(let clientMsgId):
+            markDeliveredToHub(clientMsgId: clientMsgId)
         }
     }
 
@@ -305,7 +367,13 @@ final class AlertsViewModel: ObservableObject {
 
     // MARK: - Sightings
 
-    func submitSighting(caseId: String, freeText: String, location: (Double, Double)? = nil) async {
+    func submitSighting(
+        caseId: String,
+        freeText: String,
+        location: (Double, Double)? = nil,
+        photoJPEG: Data? = nil,
+        voiceM4A: Data? = nil
+    ) async {
         guard let reg = registration else {
             submissionState = .failed("Not onboarded")
             return
@@ -316,10 +384,24 @@ final class AlertsViewModel: ObservableObject {
             clientMsgId: UUID().uuidString,
             freeText: freeText,
             observedAt: Date(),
-            location: location
+            location: location,
+            photoJPEG: photoJPEG,
+            voiceM4A: voiceM4A
         )
+        let summary = SubmittedSighting(
+            id: sighting.clientMsgId,
+            caseId: caseId,
+            freeText: freeText,
+            observedAt: sighting.observedAt,
+            hasPhoto: photoJPEG != nil,
+            hasVoiceNote: voiceM4A != nil
+        )
+        submittedSightings.insert(summary, at: 0)
         if isDemoMode {
             try? await Task.sleep(nanoseconds: 400_000_000)
+            updateSightingDelivery(id: summary.id, to: .sentToHub)
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            updateSightingDelivery(id: summary.id, to: .deliveredToHub)
             submissionState = .sent
             return
         }
@@ -328,10 +410,32 @@ final class AlertsViewModel: ObservableObject {
             // bridge that owns the BLE handle (kept out of this VM to avoid
             // a cross-import).
             try await hubClient.submitSighting(sighting, userId: reg.userId)
+            updateSightingDelivery(id: summary.id, to: .sentToHub)
             submissionState = .sent
         } catch {
+            updateSightingDelivery(id: summary.id, to: .failed("offline"))
             submissionState = .failed("Could not reach hub. Sighting will be queued for relay over the mesh.")
             pendingSighting = PendingSighting(draft: sighting, hubPubkey: reg.hubPubkey)
+        }
+    }
+
+    private func updateSightingDelivery(id: String, to status: AmberDeliveryStatus) {
+        if let i = submittedSightings.firstIndex(where: { $0.id == id }) {
+            submittedSightings[i].delivery = status
+        }
+    }
+
+    /// Called by the bridge when a hub-level ACK is received for a previously
+    /// submitted sighting / message / location report.
+    func markDeliveredToHub(clientMsgId: String) {
+        if let i = submittedSightings.firstIndex(where: { $0.id == clientMsgId }) {
+            submittedSightings[i].delivery = .deliveredToHub
+        }
+        if let i = sentMessages.firstIndex(where: { $0.id == clientMsgId }) {
+            sentMessages[i].delivery = .deliveredToHub
+        }
+        if let i = locationReports.firstIndex(where: { $0.id == clientMsgId }) {
+            locationReports[i].delivery = .deliveredToHub
         }
     }
 }
@@ -347,10 +451,47 @@ struct AmberAlert: Identifiable, Equatable {
     let version: UInt8
     let receivedVia: ReceivedVia
     let photoURL: URL?
+    let category: AlertCategory
 
     enum ReceivedVia: String, Equatable {
         case mesh
         case internet
+    }
+}
+
+enum AlertCategory: UInt8, CaseIterable, Identifiable, Equatable {
+    case missingPerson = 0x01
+    case medical = 0x02
+    case resourceShortage = 0x03
+    case safety = 0x04
+
+    var id: UInt8 { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .missingPerson: return "Missing person"
+        case .medical: return "Medical"
+        case .resourceShortage: return "Resource shortage"
+        case .safety: return "Safety"
+        }
+    }
+
+    var shortName: String {
+        switch self {
+        case .missingPerson: return "Missing"
+        case .medical: return "Medical"
+        case .resourceShortage: return "Resources"
+        case .safety: return "Safety"
+        }
+    }
+
+    var systemIcon: String {
+        switch self {
+        case .missingPerson: return "person.fill.questionmark"
+        case .medical: return "cross.case.fill"
+        case .resourceShortage: return "drop.fill"
+        case .safety: return "exclamationmark.triangle.fill"
+        }
     }
 }
 
@@ -373,6 +514,15 @@ struct SightingDraft {
     let freeText: String
     let observedAt: Date
     let location: (Double, Double)?
+    let photoJPEG: Data?
+    let voiceM4A: Data?
+}
+
+enum AmberDeliveryStatus: Equatable {
+    case pending           // not yet delivered to anything
+    case sentToHub         // HTTP/Nostr returned 200
+    case deliveredToHub    // hub-level ACK received (mesh ack or stream ACK)
+    case failed(String)
 }
 
 struct PendingSighting {
@@ -393,10 +543,22 @@ struct SubmittedLocationReport: Identifiable, Equatable {
     let safety: LocationReportPayload.Safety
     let note: String
     let observedAt: Date
+    var delivery: AmberDeliveryStatus = .pending
 }
 
 struct SentMessage: Identifiable, Equatable {
     let id: String
     let body: String
     let sentAt: Date
+    var delivery: AmberDeliveryStatus = .pending
+}
+
+struct SubmittedSighting: Identifiable, Equatable {
+    let id: String
+    let caseId: String
+    let freeText: String
+    let observedAt: Date
+    let hasPhoto: Bool
+    let hasVoiceNote: Bool
+    var delivery: AmberDeliveryStatus = .pending
 }

@@ -42,5 +42,6 @@ private struct MainTabView: View {
                     Label("Profile", systemImage: "person.crop.circle")
                 }
         }
+        .tint(SafeThreadBrand.red)
     }
 }

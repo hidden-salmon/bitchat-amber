@@ -17,10 +17,17 @@ struct OnboardingView: View {
         NavigationStack {
             Form {
                 Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        SafeThreadWordmark()
+                        Text(SafeThreadBrand.tagline)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+
                     Text("Register with your NGO")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Text("So we can reach you when an amber alert is issued in your area.")
+                        .font(.headline)
+                    Text("So we can reach you when an alert is issued in your area.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

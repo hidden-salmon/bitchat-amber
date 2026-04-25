@@ -87,9 +87,13 @@ struct MessageNGOView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(msg.body)
                                     .font(.body)
-                                Text(msg.sentAt, style: .relative)
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
+                                HStack(spacing: 6) {
+                                    Text(msg.sentAt, style: .relative)
+                                    Text("·")
+                                    DeliveryBadge(status: msg.delivery)
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
                             }
                             .padding(.vertical, 4)
                         }
